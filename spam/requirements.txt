@@ -1,0 +1,12 @@
+cachetools==4.1.0
+fire==0.3.1
+h5py==2.7.1
+matplotlib==3.2.2
+scikit-learn==0.23.1
+numpy==1.19.0
+pandas==1.0.5
+pillow==7.1.2
+requests==2.24.0
+tqdm==4.46.1
+wget==3.2
+visdom==0.1.8.9
