@@ -1,4 +1,4 @@
-# nsml: registry.navercorp.com/nsml/airush2020:tf2.0
+# nsml: registry.navercorp.com/abuse-filtering-public/ai-rush-baseline:latest
 from distutils.core import setup
 
 setup(
@@ -17,6 +17,5 @@ setup(
                       'pillow==7.1.2',
                       'requests==2.24.0',
                       'tqdm==4.46.1',
-                      'wget==3.2',
-                      'visdom==0.1.8.9']
+                      'wget==3.2']
 )

@@ -28,7 +28,7 @@ entrypoint when running `nsml run` but you can ignore it otherwise.
 
 To run the baseline model training, stand in the `airush2020/spam` folder and run 
 ```
-nsml run -e nsml_train.py -d spam-1 -m "A good message" -g 1 -a "--experiment_name v1"
+nsml run -e nsml_train.py -d spam-1 -m "A good message" -g 1 --gpu-driver-version 418.67  -a "--experiment_name v1"
 ```
 
 ## Metric
@@ -44,14 +44,25 @@ The mapping between class names and the integer values used in the labels file i
 `normal: 0, monotone: 1, screenshot: 2, unknown: 3, unlabeled: -1`.
 #### Normal
 Normal review images, that should not be detected as spam.
+
+![normal](./images/normal.jpg)
 #### Monotone
 Images that are not real review images, and mostly containing one color.
+
+![monotone](./images/monotone.jpg)
 #### Screenshot 
 Images that are not real review images, and contain screenshots from the Naver shopping website.
+
+![screenshot](./images/screenshot_1.png)
 #### Unknown
 Images that are not real review images, but don't fall under any of the classes above.
+
+![unknown](./images/unknown_2.png)
 #### Unlabeled
 Images that have not been labeled yet. Can be used to train the model in a semi-supervised way if you want.
 
 ### Format
 See AI Rush dataset documentation.
+
+```
+

@@ -1,14 +1,10 @@
 import itertools
-from typing import List, Tuple
-
-import tensorflow.keras as keras
-import matplotlib.pyplot as plt
-from matplotlib import ticker
-import numpy as np
-from tensorflow.keras.callbacks import Callback
-from sklearn.metrics import classification_report, precision_recall_curve, average_precision_score, confusion_matrix
-from sklearn.preprocessing import label_binarize
+import keras
 import nsml
+import numpy as np
+from keras.callbacks import Callback
+from sklearn.metrics import classification_report
+from typing import List, Tuple
 
 
 class Metrics(Callback):
@@ -110,3 +106,4 @@ class NSMLReportCallback(keras.callbacks.Callback):
 
     def _to_json_serializable(self, v):
         return v if not isinstance(v, np.float32) else v.item()
+

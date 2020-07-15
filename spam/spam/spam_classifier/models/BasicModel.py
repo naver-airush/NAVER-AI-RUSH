@@ -1,12 +1,12 @@
+from typing import Callable, List
+
+import keras
+from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from keras.optimizers import SGD, Adam
 import nsml
 import numpy as np
 import pandas as pd
 from sklearn.metrics import classification_report
-from tensorflow.keras import Model
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
-from tensorflow.keras.losses import CategoricalCrossentropy
-from tensorflow.keras.optimizers import SGD, Adam, Optimizer
-from typing import Callable, List
 
 from spam.spam_classifier.datasets.dataset import Dataset
 from spam.spam_classifier.models.utils import Metrics, NSMLReportCallback, evaluate
@@ -20,7 +20,7 @@ class BasicModel:
 
     def __init__(self, network_fn: Callable, dataset_cls: Dataset, dataset_kwargs, network_kwargs):
         self.data: Dataset = dataset_cls(**kwargs_or_empty_dict(dataset_kwargs))
-        self.network: Model = network_fn(**kwargs_or_empty_dict(network_kwargs))
+        self.network: keras.Model = network_fn(**kwargs_or_empty_dict(network_kwargs))
         self.debug = False
 
     def fit(self, epochs_finetune, epochs_full, batch_size, debug=False):
@@ -33,21 +33,21 @@ class BasicModel:
         )
 
         steps_per_epoch_train = int(self.data.len('train') / batch_size) if not self.debug else 2
-        steps_per_epoch_val = int(self.data.len('val') / batch_size) if not self.debug else 2
         model_path_finetune = 'model_finetuned.h5'
         train_gen, val_gen = self.data.train_val_gen(batch_size)
-        self.network.fit(x=train_gen,
-                         steps_per_epoch=steps_per_epoch_train,
-                         epochs=epochs_finetune,
-                         callbacks=self.callbacks(
-                             model_path=model_path_finetune,
-                             model_prefix='last_layer_tuning',
-                             patience=5,
-                             val_gen=val_gen,
-                             classes=self.data.classes),
-                         validation_data=val_gen,
-                         validation_steps=steps_per_epoch_val,
-                         workers=20)  # TODO change to be dependent on n_cpus
+        nsml.save(checkpoint='best')
+        self.network.fit_generator(generator=train_gen,
+                                   steps_per_epoch=steps_per_epoch_train,
+                                   epochs=epochs_finetune,
+                                   callbacks=self.callbacks(
+                                       model_path=model_path_finetune,
+                                       model_prefix='last_layer_tuning',
+                                       patience=5,
+                                       val_gen=val_gen,
+                                       classes=self.data.classes),
+                                   validation_data=val_gen,
+                                   use_multiprocessing=True,
+                                   workers=20)  # TODO change to be dependent on n_cpus
 
         self.network.load_weights(model_path_finetune)
         self.unfreeze()
@@ -59,19 +59,18 @@ class BasicModel:
         )
 
         model_path_full = 'model_full.h5'
-        self.network.fit(x=train_gen,
-                         steps_per_epoch=steps_per_epoch_train,
-                         epochs=epochs_full,
-                         callbacks=self.callbacks(
-                             model_path=model_path_full,
-                             model_prefix='full_tuning',
-                             val_gen=val_gen,
-                             patience=10,
-                             classes=self.data.classes),
-                         validation_data=val_gen,
-                         validation_steps=steps_per_epoch_val,
-                         use_multiprocessing=False,
-                         workers=20)
+        self.network.fit_generator(generator=train_gen,
+                                   steps_per_epoch=steps_per_epoch_train,
+                                   epochs=epochs_full,
+                                   callbacks=self.callbacks(
+                                       model_path=model_path_full,
+                                       model_prefix='full_tuning',
+                                       val_gen=val_gen,
+                                       patience=10,
+                                       classes=self.data.classes),
+                                   validation_data=val_gen,
+                                   use_multiprocessing=True,
+                                   workers=20)
 
         self.network.load_weights(model_path_full)
         nsml.save(checkpoint='best')
@@ -83,10 +82,10 @@ class BasicModel:
             layer.trainable = True
 
     def loss(self) -> str:
-        loss = CategoricalCrossentropy()
+        loss = keras.losses.CategoricalCrossentropy()
         return loss
 
-    def optimizer(self, stage: str) -> Optimizer:
+    def optimizer(self, stage: str) -> keras.optimizers.Optimizer:
         return {
             'finetune': SGD(lr=1e-4, momentum=0.9),
             'full': Adam(lr=1e-4)
@@ -134,10 +133,9 @@ class BasicModel:
 
         Args:
             gen: Keras generator for which to get metrics
+            n_batches: How many batches that can be fetched from the data generator.
         """
-        y_true, y_pred = evaluate(
-            data_gen=gen,
-            model=self.network)
+        y_true, y_pred = evaluate(data_gen=gen, model=self.network)
         y_true, y_pred = [np.argmax(y, axis=1) for y in [y_true, y_pred]]
 
         cls_report = classification_report(

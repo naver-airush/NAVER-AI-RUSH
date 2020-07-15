@@ -1,6 +1,6 @@
-from tensorflow.keras import Input, Model
-from tensorflow.keras.applications.resnet_v2 import ResNet50V2
-from tensorflow.keras.layers import Flatten, Dense
+from keras import Input, Model
+from keras.applications.resnet_v2 import ResNet50V2
+from keras.layers import Flatten, Dense
 from os import path
 
 
