@@ -13,7 +13,7 @@ Baseline model은 간단한 windowed RNN을 사용하였습니다.
 
 To run the baseline model training, stand in the `airush2020/spam` folder and run 
 ```
-nsml run -e main.py  -m "A good message" -v -d hatespeech-1
+nsml run -e main.py  -m "A good message" -d hatespeech-1
 ```
 
 ## Metric
