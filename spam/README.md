@@ -28,7 +28,7 @@ entrypoint when running `nsml run` but you can ignore it otherwise.
 
 To run the baseline model training, stand in the `airush2020/spam` folder and run 
 ```
-nsml run -e nsml_train.py -d spam-1 -m "A good message" -g 1 --gpu-driver-version 418.67  -a "--experiment_name v1"
+nsml run -e nsml_train.py -d spam-1 -m "A good message" -g 1 -a "--experiment_name v1"
 ```
 
 ## Metric
@@ -64,5 +64,4 @@ Images that have not been labeled yet. Can be used to train the model in a semi-
 ### Format
 See AI Rush dataset documentation.
 
-```
 
