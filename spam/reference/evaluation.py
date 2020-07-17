@@ -30,7 +30,8 @@ def evaluate(prediction, ground_truth):
         y_pred=df['y_pred'],
         output_dict=True,
         target_names=classes,
-        labels=np.arange(len(classes))
+        labels=np.arange(len(classes)),
+        zero_division=0
     )
 
     # Geometrical mean of f1-scores of non-normal classes
@@ -52,4 +53,7 @@ if __name__ == '__main__':
     args.add_argument('--prediction', type=str, default='pred.txt')  # output_file from data_loader.py
     args.add_argument('--test_label_path', type=str)  # Ground truth  test/test_label <- csv file
     config = args.parse_args()
-    print(evaluation_metrics(config.prediction, config.test_label_path))
+    try:
+        print(evaluation_metrics(config.prediction, config.test_label_path))
+    except:
+        print(0.0)
