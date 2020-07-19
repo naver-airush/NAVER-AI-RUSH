@@ -18,7 +18,7 @@ from torchtext.data import Example
 from model import BaseLine
 from data import HateSpeech
 
-from sklearn.metrics import f1_score
+from sklearn.metrics import recall_score, precision_score, f1_score
 
 def bind_model(model):
     def save(dirname, *args):
@@ -106,22 +106,28 @@ class Trainer(object):
             # calc f1-score
             y_true = np.array(true_lst) > 0.5
             y_pred = np.array(pred_lst) > 0.5
+            train_recall_score = recall_score(y_true, y_pred)
+            train_precision_score = precision_score(y_true, y_pred)
             train_f1_score = f1_score(y_true, y_pred)
 
             tq_iter.set_description('{:2} loss: {:.5}, acc: {:.5}'.format(epoch, loss_sum / total_len, acc_sum / total_len), True)
             print(json.dumps(
                 {'type': 'train', 'dataset': 'hate_speech',
-                 'epoch': epoch, 'loss': loss_sum / total_len, 'acc': acc_sum / total_len, 'f1': train_f1_score}))
+                 'epoch': epoch, 'loss': loss_sum / total_len, 'acc': acc_sum / total_len,
+                 'recall': train_recall_score, 'precision': train_precision_score, 'f1': train_f1_score}))
 
             pred_lst, loss_avg, acc_lst, te_total = self.eval(self.test_iter, len(self.task.datasets[1]))
 
             # calc f1-score
             y_pred = np.array(pred_lst) > 0.5
             y_true = np.where(np.array(acc_lst) > 0.5, y_pred, 1 - y_pred)
+            test_recall_score = recall_score(y_true, y_pred)
+            test_precision_score = precision_score(y_true, y_pred)
             test_f1_score = f1_score(y_true, y_pred)
             print(json.dumps(
                 {'type': 'test', 'dataset': 'hate_speech',
-                 'epoch': epoch, 'loss': loss_avg,  'acc': sum(acc_lst) / te_total, 'f1': test_f1_score}))
+                 'epoch': epoch, 'loss': loss_avg,  'acc': sum(acc_lst) / te_total,
+                 'recall': test_recall_score, 'precision': test_precision_score, 'f1': test_f1_score}))
             nsml.save(epoch)
             self.save_model(self.model, 'e{}'.format(epoch))
 
