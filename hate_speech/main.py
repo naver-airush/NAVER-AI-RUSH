@@ -18,6 +18,8 @@ from torchtext.data import Example
 from model import BaseLine
 from data import HateSpeech
 
+from sklearn.metrics import f1_score
+
 def bind_model(model):
     def save(dirname, *args):
         checkpoint = {
@@ -77,6 +79,9 @@ class Trainer(object):
             tq_iter = tqdm(enumerate(ds_iter), total=tr_total, miniters=min_iters, unit_scale=self.batch_size,
                            bar_format='{n_fmt}/{total_fmt} [{elapsed}<{remaining} {rate_fmt}] {desc}')
 
+            true_lst = list()
+            pred_lst = list()
+
             self.model.train()
             for i, batch in tq_iter:
                 self.model.zero_grad()
@@ -85,6 +90,9 @@ class Trainer(object):
                 loss = self.loss_fn(pred, batch.eval_reply)
                 loss.backward()
                 optimizer.step()
+
+                true_lst += batch.eval_reply.tolist()
+                pred_lst += pred.tolist()
 
                 len_batch = len(batch)
                 len_batch_sum += len_batch
@@ -95,16 +103,25 @@ class Trainer(object):
                 if i == 3000:
                     break
 
-            tq_iter.set_description('{:2} loss: {:.5}, acc: {:.5}'.format(epoch, loss_sum / total_len, acc_sum / total_len), True)
+            # calc f1-score
+            y_true = np.array(true_lst) > 0.5
+            y_pred = np.array(pred_lst) > 0.5
+            train_f1_score = f1_score(y_true, y_pred)
 
+            tq_iter.set_description('{:2} loss: {:.5}, acc: {:.5}'.format(epoch, loss_sum / total_len, acc_sum / total_len), True)
             print(json.dumps(
                 {'type': 'train', 'dataset': 'hate_speech',
-                 'epoch': epoch, 'loss': loss_sum / total_len, 'acc': acc_sum / total_len}))
+                 'epoch': epoch, 'loss': loss_sum / total_len, 'acc': acc_sum / total_len, 'f1': train_f1_score}))
 
             pred_lst, loss_avg, acc_lst, te_total = self.eval(self.test_iter, len(self.task.datasets[1]))
+
+            # calc f1-score
+            y_pred = np.array(pred_lst) > 0.5
+            y_true = np.where(np.array(acc_lst) > 0.5, y_pred, 1 - y_pred)
+            test_f1_score = f1_score(y_true, y_pred)
             print(json.dumps(
                 {'type': 'test', 'dataset': 'hate_speech',
-                 'epoch': epoch, 'loss': loss_avg,  'acc': sum(acc_lst) / te_total}))
+                 'epoch': epoch, 'loss': loss_avg,  'acc': sum(acc_lst) / te_total, 'f1': test_f1_score}))
             nsml.save(epoch)
             self.save_model(self.model, 'e{}'.format(epoch))
 
