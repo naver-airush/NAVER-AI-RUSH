@@ -131,6 +131,14 @@ class Trainer(object):
             nsml.save(epoch)
             self.save_model(self.model, 'e{}'.format(epoch))
 
+            # plot graphs
+            train_loss = loss_sum / total_len
+            test_loss = loss_avg
+            nsml.report(step=epoch, train_loss=train_loss,
+                        train_recall=train_recall_score, train_precision=train_precision_score, train_f1=train_f1_score)
+            nsml.report(step=epoch, test_loss=test_loss,
+                        test_recall=test_recall_score, test_precision=test_precision_score, test_f1=test_f1_score)
+
     def eval(self, iter:Iterator, total:int) -> (List[float], float, List[float], int):
         tq_iter = tqdm(enumerate(iter), total=math.ceil(total / self.batch_size),
                        unit_scale=self.batch_size, bar_format='{r_bar}')
