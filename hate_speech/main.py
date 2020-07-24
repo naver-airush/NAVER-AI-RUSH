@@ -51,20 +51,20 @@ class Trainer(object):
     TRAIN_DATA_PATH = '{}/train/train_data'.format(DATASET_PATH[0])
     UNLABELED_DATA_PATH = '{}/train/raw.json'.format(DATASET_PATH[1])
 
-    def __init__(self, hdfs_host: str = None, device: str = 'cpu'):
+    def __init__(self, model, hdfs_host: str = None, device: str = 'cpu'):
         self.device = device
         self.task = HateSpeech(self.TRAIN_DATA_PATH, (9, 1))  # train 9 : test 1
-        self.embedding = self.train_embedding()
-        # self.model = BaseLine(hidden_dim, 3, 0.2, self.task.max_vocab_indexes['syllable_contents'], 384, self.embedding)
-        self.model = BaseLine(hidden_dim, 3, 0.2, self.task.max_vocab_indexes['syllable_contents'], 64)
+        # self.embedding = self.train_embedding()
+        self.model = model
         self.model.to(self.device)
         self.loss_fn = nn.BCELoss()
-        self.batch_size = 128
+        self.batch_size = 32
         self.__test_iter = None
         bind_model(self.model)
+        print(f'batch_size: {self.batch_size}')
 
     def train_embedding(self):
-        word2vec = Word2Vec(self.task.max_vocab_indexes['syllable_contents'], 384)
+        word2vec = Word2Vec(self.task.max_vocab_indexes['syllable_contents'], EMBEDDING_SIZE)
         word2vec.to('cuda')
         bind_model(word2vec)
         if WORD2VEC_LOAD:
@@ -177,7 +177,7 @@ class Trainer(object):
 
     def train(self):
         max_epoch = 32
-        lr = 0.0005
+        lr = 0.001
         print('lr:', lr)
         optimizer = optim.Adam(self.model.parameters(), lr=lr)
         total_len = len(self.task.datasets[0])
@@ -277,17 +277,22 @@ class Trainer(object):
 
 
 if __name__ == '__main__':
+    # Constants
+    HIDDEN_DIM = 256
+    FILTER_SIZE = 3
+    DROPOUT_RATE = 0.2
+    EMBEDDING_SIZE = 384
+
     parser = ArgumentParser()
     parser.add_argument('--mode', default='train')
     parser.add_argument('--pause', default=0)
     args = parser.parse_args()
     task = HateSpeech()
-    model = BaseLine(HIDDEN_DIM, FILTER_SIZE, DROPOUT_RATE, task.max_vocab_indexes['syllable_contents'], 384)
+    model = BaseLine(HIDDEN_DIM, FILTER_SIZE, DROPOUT_RATE, task.max_vocab_indexes['syllable_contents'], EMBEDDING_SIZE)
     if args.pause:
-        
         model.to("cuda")
         bind_model(model)
         nsml.paused(scope=locals())
     if args.mode == 'train':
-        trainer = Trainer(device='cuda')
+        trainer = Trainer(model, device='cuda')
         trainer.train()

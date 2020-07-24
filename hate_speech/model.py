@@ -16,11 +16,11 @@ class BaseLine(nn.Module):
 
         if pre_trained_embedding is None:
             self.vocab_size = vocab_size
-            self.embedding = nn.Embedding(self.vocab_size, self.embedding_dim, padding_idx=0)
+            self.embedding = nn.Embedding(self.vocab_size, self.embedding_dim, padding_idx=1)
         else:
             freeze = False
             print('freeze:', freeze)
-            self.embedding = nn.Embedding.from_pretrained(pre_trained_embedding, freeze=freeze, padding_idx=0)
+            self.embedding = nn.Embedding.from_pretrained(pre_trained_embedding, freeze=freeze, padding_idx=1)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(self.dropout_rate)
         self.conv1d = nn.Conv1d(self.embedding_dim, self.hidden_dim, self.filter_size)
@@ -54,7 +54,7 @@ class BaseLine(nn.Module):
 class Word2Vec(nn.Module):
     def __init__(self, vocab_size, embedding_dim):
         super(Word2Vec, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
+        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=1)
         self.W = Variable(torch.randn(embedding_dim, vocab_size, device='cuda'), requires_grad=True)
 
     def forward(self, x, sample):
