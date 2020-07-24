@@ -8,6 +8,7 @@ from torchtext.data import Dataset, Example, Field, LabelField
 from torchtext.vocab import Vocab
 import torch
 from nsml.constants import DATASET_PATH
+import random
 
 
 class HateSpeech(object):
@@ -29,6 +30,7 @@ class HateSpeech(object):
         if corpus_path:
             self.examples = self.load_corpus(corpus_path)
             if split:
+                random.Random(2020).shuffle(self.examples)
                 total = len(self.examples)
                 pivot = int(total / sum(split) * split[0])
                 self.datasets = [Dataset(self.examples[:pivot], fields=self.fields),
@@ -40,8 +42,10 @@ class HateSpeech(object):
     def load_corpus(self, path) -> List[Example]:
         preprocessed = []
         with open(path) as fp:
+            cnt = 0
             for line in fp:
                 if line:
+                    # print(line)
                     ex = Example()
                     for k, v in json.loads(line).items():
                         setattr(ex, k, v)

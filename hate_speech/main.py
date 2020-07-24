@@ -5,7 +5,7 @@ import typing
 from typing import Dict, List
 import os
 from argparse import ArgumentParser
-
+import random
 from torch import nn, optim
 import torch
 from torchtext.data import Iterator
@@ -15,10 +15,16 @@ import nsml
 from nsml import DATASET_PATH, HAS_DATASET, GPU_NUM, IS_ON_NSML
 from torchtext.data import Example
 
-from model import BaseLine
+from model import BaseLine, Word2Vec
 from data import HateSpeech
 
 from sklearn.metrics import recall_score, precision_score, f1_score
+
+WORD2VEC_LOAD = True
+WORD2VEC_CHECKPOINT = 'word2vec1199999'
+WORD2VEC_SESSION = 'yonsweng/hate_2/73'
+print(WORD2VEC_CHECKPOINT, WORD2VEC_SESSION)
+
 
 def bind_model(model):
     def save(dirname, *args):
@@ -42,17 +48,121 @@ def bind_model(model):
 
 
 class Trainer(object):
-    TRAIN_DATA_PATH = '{}/train/train_data'.format(DATASET_PATH)
+    TRAIN_DATA_PATH = '{}/train/train_data'.format(DATASET_PATH[0])
+    UNLABELED_DATA_PATH = '{}/train/raw.json'.format(DATASET_PATH[1])
 
     def __init__(self, hdfs_host: str = None, device: str = 'cpu'):
         self.device = device
-        self.task = HateSpeech(self.TRAIN_DATA_PATH, (9, 1))
-        self.model = BaseLine(256, 3, 0.2, self.task.max_vocab_indexes['syllable_contents'], 384)
+        self.task = HateSpeech(self.TRAIN_DATA_PATH, (9, 1))  # train 9 : test 1
+        self.embedding = self.train_embedding()
+        # self.model = BaseLine(hidden_dim, 3, 0.2, self.task.max_vocab_indexes['syllable_contents'], 384, self.embedding)
+        self.model = BaseLine(hidden_dim, 3, 0.2, self.task.max_vocab_indexes['syllable_contents'], 64)
         self.model.to(self.device)
         self.loss_fn = nn.BCELoss()
         self.batch_size = 128
         self.__test_iter = None
         bind_model(self.model)
+
+    def train_embedding(self):
+        word2vec = Word2Vec(self.task.max_vocab_indexes['syllable_contents'], 384)
+        word2vec.to('cuda')
+        bind_model(word2vec)
+        if WORD2VEC_LOAD:
+            nsml.load(WORD2VEC_CHECKPOINT, session=WORD2VEC_SESSION)
+        else:
+            preprocessed = []
+            with open(self.TRAIN_DATA_PATH) as fp:
+                for line in fp:
+                    if line:
+                        tokens = json.loads(line)['syllable_contents']
+                        preprocessed.append(tokens)
+            with open(self.UNLABELED_DATA_PATH) as fp:
+                for line in fp:
+                    if line:
+                        tokens = json.loads(line)['syllable_contents']
+                        preprocessed.append(tokens)
+            print('# of sentences:', len(preprocessed))
+
+            # count occurrences of tokens
+            token_cnt = [0] * self.task.max_vocab_indexes['syllable_contents']
+            for sentence in preprocessed:
+                for token in sentence:
+                    token_cnt[token] += 1
+            token_sum = sum(token_cnt)
+            token_prob = [cnt / token_sum for cnt in token_cnt]
+            # print('token probabilities')
+            # print('2:', token_prob[2])
+            # print('100:', token_prob[100])
+            token_prob = [prob ** 0.75 for prob in token_prob]
+            token_prob_sum = sum(token_prob)
+            token_prob = [prob / token_prob_sum for prob in token_prob]
+            # print('token adjusted probabilities')
+            # print('2:', token_prob[2])
+            # print('100:', token_prob[100])
+            tokens = [i for i in range(self.task.max_vocab_indexes['syllable_contents'])]
+
+            lr = 0.03
+            print('word2vec lr:', lr)
+            optimizer = optim.Adam(word2vec.parameters(), lr=lr)
+            loss_fn = nn.BCELoss()
+            losses = []
+            batch_cnt = 0
+            negative_sample_size = 5
+            window_size = 5
+            word2vec_batch_size = 1024
+            for epoch in range(1):
+                print('word2vec epoch:', epoch)
+                epoch_loss = 0
+                epoch_token_cnt = 0
+                sentence_loss = 0
+                sentence_token_cnt = 0
+                random.shuffle(preprocessed)
+                for i_sentence, sentence in enumerate(preprocessed):
+                    if (i_sentence+1) % 10000 == 0:
+                        print(i_sentence+1, 'loss:', sentence_loss/sentence_token_cnt)
+                        nsml.report(step=i_sentence+1, loss=sentence_loss/sentence_token_cnt)
+                        sentence_loss = 0
+                        sentence_token_cnt = 0
+                        
+                    # save checkpoint
+                    if (i_sentence+1) % 100000 == 0:
+                        nsml.save('word2vec' + str(i_sentence+1))
+
+                    # sample only 5
+                    for center in random.sample(range(len(sentence)), min(10, len(sentence))):
+                    # for center in range(len(sentence)):
+                        left = center - window_size
+                        if left < 0:
+                            left = 0
+                        right = center + window_size
+
+                        # negative sample
+                        negative_sample = np.random.choice(tokens, negative_sample_size, p=token_prob)
+                        positive_sample = np.array([sentence[center]])
+                        sample = np.concatenate([positive_sample, negative_sample])
+                        target = np.where(sample == sentence[center], 1., 0.)
+                        sample = torch.tensor(sample, device='cuda')
+                        target = torch.tensor(target, device='cuda')
+
+                        x = torch.tensor(sentence[left:center] + sentence[center+1:right+1], device='cuda')
+                        output = word2vec(x, sample)  # (vocab_size,)
+                        losses.append(loss_fn(output.double(), target.double()))
+
+                        batch_cnt += 1
+                        if batch_cnt == word2vec_batch_size:
+                            optimizer.zero_grad()
+                            loss = sum(losses)
+                            epoch_loss += loss.tolist()
+                            sentence_loss += loss.tolist()
+                            sentence_token_cnt += word2vec_batch_size
+                            epoch_token_cnt += word2vec_batch_size
+                            loss.backward()
+                            losses = []
+                            optimizer.step()
+                            batch_cnt = 0
+                print('loss:', epoch_loss / epoch_token_cnt)
+        # print(word2vec.embedding.weight[2])
+        return word2vec.embedding.weight
 
     @property
     def test_iter(self) -> Iterator:
@@ -67,10 +177,13 @@ class Trainer(object):
 
     def train(self):
         max_epoch = 32
-        optimizer = optim.Adam(self.model.parameters())
+        lr = 0.0005
+        print('lr:', lr)
+        optimizer = optim.Adam(self.model.parameters(), lr=lr)
         total_len = len(self.task.datasets[0])
+        print('shuffle: True')
         ds_iter = Iterator(self.task.datasets[0], batch_size=self.batch_size, repeat=False,
-                           sort_key=lambda x: len(x.syllable_contents), train=True, device=self.device)
+                           shuffle=True, train=True, device=self.device)
         min_iters = 10
         for epoch in range(max_epoch):
             loss_sum, acc_sum, len_batch_sum = 0., 0., 0.
@@ -168,9 +281,10 @@ if __name__ == '__main__':
     parser.add_argument('--mode', default='train')
     parser.add_argument('--pause', default=0)
     args = parser.parse_args()
+    task = HateSpeech()
+    model = BaseLine(HIDDEN_DIM, FILTER_SIZE, DROPOUT_RATE, task.max_vocab_indexes['syllable_contents'], 384)
     if args.pause:
-        task = HateSpeech()
-        model = BaseLine(256, 3, 0.2, task.max_vocab_indexes['syllable_contents'], 384)
+        
         model.to("cuda")
         bind_model(model)
         nsml.paused(scope=locals())
